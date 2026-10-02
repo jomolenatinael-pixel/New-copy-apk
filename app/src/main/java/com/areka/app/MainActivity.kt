@@ -112,7 +112,9 @@ fun ArekaV2App(
             questionBank = appContainer.questionBank,
             progressRepository = appContainer.progressRepository,
             quizRepository = appContainer.quizRepository,
-            mistakeRepository = appContainer.mistakeRepository
+            mistakeRepository = appContainer.mistakeRepository,
+            syncRepository = appContainer.syncRepository,
+            profileRepository = appContainer.profileRepository
         )
     )
 
@@ -322,6 +324,11 @@ fun ArekaV2App(
                             uiState = practiceUiState,
                             onEvent = { event ->
                                 when (event) {
+                                    is PracticeEvent.ToggleSubject -> practiceViewModel.toggleSubject(event.subjectId)
+                                    is PracticeEvent.OpenSubject -> {
+                                        learnViewModel.selectSubject(event.subjectId)
+                                        navManager.navigateTo(NavRoute.SubjectDetail(event.subjectId))
+                                    }
                                     is PracticeEvent.SelectCategory -> practiceViewModel.selectCategory(event.category)
                                     is PracticeEvent.SelectSubjectFilter -> practiceViewModel.selectSubjectFilter(event.subjectId)
                                     is PracticeEvent.StartQuiz -> {

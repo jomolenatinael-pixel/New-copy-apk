@@ -1,16 +1,22 @@
 package com.areka.app.feature.practice.presentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,12 +28,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.areka.app.core.designsystem.*
-import com.areka.app.core.repository.ActionType
-import java.text.SimpleDateFormat
-import java.util.Date
+import com.areka.app.data.model.BadgeType
+import com.areka.app.data.model.LeaderboardEntry
+import com.areka.app.data.model.SubjectItem
+import com.areka.app.data.model.SubjectUnit
+import java.text.NumberFormat
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeScreen(
     uiState: PracticeUiState,
@@ -35,7 +42,7 @@ fun PracticeScreen(
     modifier: Modifier = Modifier
 ) {
     if (uiState.isLoading && uiState.subjects.isEmpty()) {
-        LoadingState(modifier = modifier.fillMaxSize(), message = "Loading practice hub...")
+        LoadingState(modifier = modifier.fillMaxSize(), message = "Loading subjects...")
         return
     }
 
@@ -43,338 +50,434 @@ fun PracticeScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("practice_screen"),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // A) Header
         item(key = "practice_header") {
-            Column {
+            Column(modifier = Modifier.padding(bottom = 2.dp)) {
                 Text(
-                    text = "Practice Hub",
+                    text = "Practice",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Targeted quizzes, weak area reinforcement, and past attempts",
+                    text = "Pick a subject to practice",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.textMuted
                 )
             }
         }
 
-        // Category Segmented Tabs
-        item(key = "categories_row") {
+        // B) Beautiful SUBJECTS section (main content)
+        items(uiState.subjects, key = { "subject_${it.id}" }) { subject ->
+            val isExpanded = uiState.expandedSubjectId == subject.id
+            val units = uiState.subjectUnitsMap[subject.id].orEmpty()
+            val completedUnits = uiState.subjectCompletedUnitsMap[subject.id] ?: 0
+            val accentColor = Color(subject.accentColorHex)
+
+            PracticeSubjectCard(
+                subject = subject,
+                units = units,
+                completedUnits = completedUnits,
+                isExpanded = isExpanded,
+                accentColor = accentColor,
+                onToggleExpand = { onEvent(PracticeEvent.ToggleSubject(subject.id)) },
+                onStartQuiz = { unitId ->
+                    onEvent(PracticeEvent.StartQuiz("quiz_$unitId", unitId, subject.id))
+                },
+                onStudyFlashcards = { unitId ->
+                    onEvent(PracticeEvent.StudyFlashcards(unitId, subject.id))
+                },
+                onOpenSubject = {
+                    onEvent(PracticeEvent.OpenSubject(subject.id))
+                }
+            )
+        }
+
+        // C) LEADERBOARD section on Practice
+        item(key = "leaderboard_divider") {
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.subtleBorder)
+        }
+
+        item(key = "leaderboard_header") {
+            Column(modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    text = "Leaderboard",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Top Grade 10 students",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.textMuted
+                )
+            }
+        }
+
+        if (uiState.leaderboard.isEmpty()) {
+            item(key = "leaderboard_empty") {
+                ArekaV2Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    Text(
+                        text = "Rankings will appear as students complete quizzes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.textMuted
+                    )
+                }
+            }
+        } else {
+            items(uiState.leaderboard.take(10), key = { "lb_${it.id}_${it.rank}" }) { entry ->
+                LeaderboardCompactRow(
+                    entry = entry,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PracticeSubjectCard(
+    subject: SubjectItem,
+    units: List<SubjectUnit>,
+    completedUnits: Int,
+    isExpanded: Boolean,
+    accentColor: Color,
+    onToggleExpand: () -> Unit,
+    onStartQuiz: (unitId: String) -> Unit,
+    onStudyFlashcards: (unitId: String) -> Unit,
+    onOpenSubject: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val totalUnits = if (units.isNotEmpty()) units.size else subject.quizCount
+
+    ArekaV2Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("practice_subject_${subject.id}"),
+        onClick = onToggleExpand,
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(accentColor.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = getSubjectIcon(subject.iconType),
+                        contentDescription = subject.name,
+                        tint = accentColor,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = subject.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (completedUnits > 0) "$totalUnits units • $completedUnits completed" else "$totalUnits units",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.textMuted
+                    )
+                }
+
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.testTag("toggle_subject_${subject.id}")
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse units" else "Expand units",
+                        tint = MaterialTheme.colorScheme.textMuted
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.subtleBorder)
+
+                    if (units.isEmpty()) {
+                        Text(
+                            text = "Loading units...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.textMuted,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        units.forEach { unit ->
+                            PracticeUnitRow(
+                                unit = unit,
+                                onStartQuiz = { onStartQuiz(unit.id) },
+                                onStudyFlashcards = { onStudyFlashcards(unit.id) }
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = onOpenSubject,
+                            modifier = Modifier.testTag("open_subject_${subject.id}")
+                        ) {
+                            Text(
+                                text = "View Subject Overview",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PracticeUnitRow(
+    unit: SubjectUnit,
+    onStartQuiz: () -> Unit,
+    onStudyFlashcards: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceSubtle,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "U${unit.unitNumber}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Unit ${unit.unitNumber}: ${unit.title}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (unit.description.isNotBlank()) {
+                        Text(
+                            text = unit.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.textMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PracticeCategory.entries.forEach { category ->
-                    val isSelected = uiState.selectedCategory == category
-                    val label = when (category) {
-                        PracticeCategory.RECOMMENDED -> "Recommended"
-                        PracticeCategory.BY_SUBJECT -> "By Subject"
-                        PracticeCategory.WEAK_AREAS -> "Weak Areas (${uiState.weakAreas.size})"
-                        PracticeCategory.RECENT -> "Recent (${uiState.recentAttempts.size})"
-                    }
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onEvent(PracticeEvent.SelectCategory(category)) },
-                        label = {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.testTag("category_chip_${category.name.lowercase()}")
+                Button(
+                    onClick = onStartQuiz,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp)
+                        .testTag("unit_quiz_btn_${unit.id}"),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Take Quiz",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onStudyFlashcards,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp)
+                        .testTag("unit_flashcard_btn_${unit.id}"),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Layers,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Flashcards",
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
             }
         }
+    }
+}
 
-        // Content based on selected Category
-        when (uiState.selectedCategory) {
-            PracticeCategory.RECOMMENDED -> {
-                if (uiState.recommendations.isEmpty()) {
-                    item(key = "empty_rec") {
-                        EmptyState(
-                            title = "All caught up!",
-                            message = "No urgent recommendations right now. Select a subject below to keep practicing."
-                        )
-                    }
-                } else {
-                    items(uiState.recommendations, key = { "rec_${it.id}" }) { rec ->
-                        StudyActionCard(
-                            title = rec.title,
-                            subtitle = rec.subtitle,
-                            reason = rec.reason,
-                            actionButtonText = when (rec.actionType) {
-                                ActionType.PRACTICE_QUIZ -> "Start Quiz"
-                                ActionType.REVIEW_FLASHCARDS -> "Study Cards"
-                                ActionType.REVIEW_MISTAKES -> "Review Mistakes"
-                            },
-                            icon = when (rec.actionType) {
-                                ActionType.PRACTICE_QUIZ -> Icons.Default.PlayArrow
-                                ActionType.REVIEW_FLASHCARDS -> Icons.Outlined.Layers
-                                ActionType.REVIEW_MISTAKES -> Icons.Default.Warning
-                            },
-                            accentColor = when (rec.actionType) {
-                                ActionType.PRACTICE_QUIZ -> MaterialTheme.colorScheme.primary
-                                ActionType.REVIEW_FLASHCARDS -> MaterialTheme.colorScheme.secondary
-                                ActionType.REVIEW_MISTAKES -> MaterialTheme.colorScheme.error
-                            },
-                            onActionClick = {
-                                when (rec.actionType) {
-                                    ActionType.PRACTICE_QUIZ -> onEvent(PracticeEvent.StartQuiz("quiz_${rec.unitId}", rec.unitId, rec.subjectId))
-                                    ActionType.REVIEW_FLASHCARDS -> onEvent(PracticeEvent.StudyFlashcards(rec.unitId, rec.subjectId))
-                                    ActionType.REVIEW_MISTAKES -> onEvent(PracticeEvent.ReviewMistakes(rec.unitId))
-                                }
-                            }
-                        )
-                    }
-                }
+@Composable
+private fun LeaderboardCompactRow(
+    entry: LeaderboardEntry,
+    modifier: Modifier = Modifier
+) {
+    val rankColor = when (entry.badgeType) {
+        BadgeType.GOLD -> Color(0xFFEAB308)
+        BadgeType.SILVER -> Color(0xFF94A3B8)
+        BadgeType.BRONZE -> Color(0xFFCD7F32)
+        BadgeType.REGULAR -> MaterialTheme.colorScheme.textMuted
+    }
+
+    val isCurrent = entry.isCurrentUser
+    val formattedPoints = try {
+        NumberFormat.getNumberInstance(Locale.US).format(entry.points)
+    } catch (_: Exception) {
+        "${entry.points}"
+    }
+
+    ArekaV2Card(
+        modifier = modifier.testTag("leaderboard_row_${entry.rank}"),
+        backgroundColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        else MaterialTheme.colorScheme.surface,
+        borderColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+        else MaterialTheme.colorScheme.subtleBorder,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "#${entry.rank}",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = rankColor,
+                modifier = Modifier.width(32.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color(entry.avatarColorHex).copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = (entry.name.firstOrNull() ?: 'S').uppercase(),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(entry.avatarColorHex)
+                )
             }
 
-            PracticeCategory.BY_SUBJECT -> {
-                // Subject Filter Chips
-                item(key = "subject_filter_row") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        uiState.subjects.forEach { subject ->
-                            val isSelected = uiState.selectedSubjectId == subject.id
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { onEvent(PracticeEvent.SelectSubjectFilter(subject.id)) },
-                                label = { Text(subject.name) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = getSubjectIcon(subject.iconType),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = entry.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isCurrent) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "YOU",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                             )
                         }
                     }
                 }
-
-                items(uiState.subjectUnits, key = { "subj_unit_${it.id}" }) { unit ->
-                    ArekaV2Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            onEvent(PracticeEvent.StartQuiz("quiz_${unit.id}", unit.id, unit.subjectId))
-                        },
-                        contentPadding = PaddingValues(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "U${unit.unitNumber}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Unit ${unit.unitNumber}: ${unit.title}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = unit.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.textMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Button(
-                                onClick = { onEvent(PracticeEvent.StartQuiz("quiz_${unit.id}", unit.id, unit.subjectId)) },
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(text = "Start", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = entry.grade,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.textMuted
+                )
             }
 
-            PracticeCategory.WEAK_AREAS -> {
-                if (uiState.weakAreas.isEmpty()) {
-                    item(key = "empty_weak") {
-                        EmptyState(
-                            title = "No weak areas detected",
-                            message = "Great job! All your attempted quizzes have high scores and no open mistakes."
-                        )
-                    }
-                } else {
-                    items(uiState.weakAreas, key = { "weak_${it.unitId}" }) { weak ->
-                        ArekaV2Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            borderColor = MaterialTheme.colorScheme.subtleBorder,
-                            contentPadding = PaddingValues(16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.errorContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "${weak.subjectName} • ${weak.unitTitle}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Text(
-                                            text = "Accuracy: ${weak.accuracyPercent}%",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                        if (weak.mistakeCount > 0) {
-                                            Text(
-                                                text = "• ${weak.mistakeCount} mistakes",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.textMuted
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Button(
-                                    onClick = { onEvent(PracticeEvent.StartQuiz("quiz_${weak.unitId}", weak.unitId, weak.subjectId)) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text(text = "Practice", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            PracticeCategory.RECENT -> {
-                if (uiState.recentAttempts.isEmpty()) {
-                    item(key = "empty_recent") {
-                        EmptyState(
-                            title = "No recent attempts yet",
-                            message = "Complete quizzes to see your history and scores logged here."
-                        )
-                    }
-                } else {
-                    items(uiState.recentAttempts, key = { "recent_${it.id}" }) { attempt ->
-                        val dateFormatted = try {
-                            val sdf = SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault())
-                            sdf.format(Date(attempt.completedAtEpochMillis))
-                        } catch (_: Exception) {
-                            "Recently completed"
-                        }
-
-                        ArekaV2Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(14.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(
-                                            if (attempt.scorePercent >= 70) MaterialTheme.colorScheme.successContainer
-                                            else MaterialTheme.colorScheme.errorContainer
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${attempt.scorePercent}%",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (attempt.scorePercent >= 70) MaterialTheme.colorScheme.success
-                                        else MaterialTheme.colorScheme.error
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = attempt.quizTitle,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "${attempt.correctAnswers}/${attempt.totalQuestions} correct • $dateFormatted",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.textMuted
-                                    )
-                                }
-
-                                TextButton(
-                                    onClick = {
-                                        onEvent(PracticeEvent.StartQuiz(attempt.quizId, attempt.unitId, attempt.subjectId))
-                                    }
-                                ) {
-                                    Text(text = "Retake", style = MaterialTheme.typography.labelMedium)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            Text(
+                text = "$formattedPoints pts",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

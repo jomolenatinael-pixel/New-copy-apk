@@ -5,8 +5,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.areka.app.core.curriculum.QuestionBank
 import com.areka.app.core.repository.IMistakeRepository
+import com.areka.app.core.repository.IProfileRepository
 import com.areka.app.core.repository.IProgressRepository
 import com.areka.app.core.repository.IQuizRepository
+import com.areka.app.core.sync.SyncRepository
+import com.areka.app.data.model.UserProfile
+import com.areka.app.data.repository.LeaderboardRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +21,9 @@ class PracticeViewModel(
     private val questionBank: QuestionBank,
     private val progressRepository: IProgressRepository,
     private val quizRepository: IQuizRepository,
-    private val mistakeRepository: IMistakeRepository
+    private val mistakeRepository: IMistakeRepository,
+    private val syncRepository: SyncRepository? = null,
+    private val profileRepository: IProfileRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PracticeUiState())
@@ -25,10 +31,10 @@ class PracticeViewModel(
 
     init {
         loadPracticeData()
-        observeRecentAttempts()
+        observeData()
     }
 
-    private fun observeRecentAttempts() {
+    private fun observeData() {
         viewModelScope.launch {
             quizRepository.observeAllAttempts().collect { attempts ->
                 _uiState.update { it.copy(recentAttempts = attempts) }
@@ -39,6 +45,34 @@ class PracticeViewModel(
                 _uiState.update { it.copy(openMistakesCount = mistakes.size) }
             }
         }
+        profileRepository?.let { profileRepo ->
+            viewModelScope.launch {
+                profileRepo.userProfile.collect { profile ->
+                    refreshLeaderboard(profile)
+                }
+            }
+        }
+        syncRepository?.let { syncRepo ->
+            viewModelScope.launch {
+                syncRepo.leaderboard.collect { cloudLb ->
+                    if (cloudLb.isNotEmpty()) {
+                        _uiState.update { it.copy(leaderboard = cloudLb.take(10)) }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun refreshLeaderboard(profile: UserProfile) {
+        val fallback = LeaderboardRepository().global(profile)
+        val cloudLb = syncRepository?.leaderboard?.value.orEmpty()
+        val effectiveLb = if (cloudLb.isNotEmpty()) cloudLb else fallback
+        _uiState.update {
+            it.copy(
+                leaderboard = effectiveLb.take(10),
+                currentUserId = profile.name
+            )
+        }
     }
 
     fun loadPracticeData() {
@@ -46,18 +80,38 @@ class PracticeViewModel(
         viewModelScope.launch {
             try {
                 val subjects = questionBank.getSubjects()
+                val unitsMap = subjects.associate { it.id to questionBank.getUnits(it.id) }
+
+                val completedMap = mutableMapOf<String, Int>()
+                runCatching {
+                    val subjectProgressList = progressRepository.getAllSubjectProgress()
+                    subjectProgressList.forEach { sp ->
+                        completedMap[sp.subjectId] = sp.completedUnits
+                    }
+                }
+
                 val initialSubjectId = _uiState.value.selectedSubjectId ?: subjects.firstOrNull()?.id ?: "math"
-                val units = questionBank.getUnits(initialSubjectId)
-                val recs = progressRepository.getRecommendations()
-                val weak = progressRepository.getWeakAreas(10)
+                val initialUnits = unitsMap[initialSubjectId].orEmpty()
+                val recs = runCatching { progressRepository.getRecommendations() }.getOrDefault(emptyList())
+                val weak = runCatching { progressRepository.getWeakAreas(10) }.getOrDefault(emptyList())
                 val openMistakes = mistakeRepository.openMistakes.value.size
+
+                val profile = profileRepository?.userProfile?.value ?: UserProfile()
+                val fallback = LeaderboardRepository().global(profile)
+                val cloudLb = syncRepository?.leaderboard?.value.orEmpty()
+                val effectiveLb = if (cloudLb.isNotEmpty()) cloudLb else fallback
 
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         subjects = subjects,
+                        expandedSubjectId = it.expandedSubjectId,
                         selectedSubjectId = initialSubjectId,
-                        subjectUnits = units,
+                        subjectUnits = initialUnits,
+                        subjectUnitsMap = unitsMap,
+                        subjectCompletedUnitsMap = completedMap,
+                        leaderboard = effectiveLb.take(10),
+                        currentUserId = profile.name,
                         recommendations = recs,
                         weakAreas = weak,
                         openMistakesCount = openMistakes,
@@ -70,6 +124,16 @@ class PracticeViewModel(
         }
     }
 
+    fun toggleSubject(subjectId: String) {
+        _uiState.update { current ->
+            val next = if (current.expandedSubjectId == subjectId) null else subjectId
+            current.copy(
+                expandedSubjectId = next,
+                selectedSubjectId = next ?: current.selectedSubjectId
+            )
+        }
+    }
+
     fun selectCategory(category: PracticeCategory) {
         _uiState.update { it.copy(selectedCategory = category) }
     }
@@ -79,6 +143,7 @@ class PracticeViewModel(
         _uiState.update {
             it.copy(
                 selectedSubjectId = subjectId,
+                expandedSubjectId = subjectId,
                 subjectUnits = units
             )
         }
@@ -89,7 +154,9 @@ class PracticeViewModel(
             questionBank: QuestionBank,
             progressRepository: IProgressRepository,
             quizRepository: IQuizRepository,
-            mistakeRepository: IMistakeRepository
+            mistakeRepository: IMistakeRepository,
+            syncRepository: SyncRepository? = null,
+            profileRepository: IProfileRepository? = null
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -97,7 +164,9 @@ class PracticeViewModel(
                     questionBank,
                     progressRepository,
                     quizRepository,
-                    mistakeRepository
+                    mistakeRepository,
+                    syncRepository,
+                    profileRepository
                 ) as T
             }
         }

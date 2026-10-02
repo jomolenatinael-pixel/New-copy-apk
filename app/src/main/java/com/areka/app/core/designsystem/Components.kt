@@ -232,13 +232,12 @@ fun SubjectCard(
     subject: SubjectItem,
     completedUnits: Int,
     totalUnits: Int,
-    averageScore: Int,
+    averageScore: Int = 0,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     testTag: String = "subject_card_${subject.id}"
 ) {
     val accentColor = Color(subject.accentColorHex)
-    val progressPercent = if (totalUnits == 0) 0 else (completedUnits * 100 / totalUnits).coerceIn(0, 100)
 
     ArekaV2Card(
         modifier = modifier.fillMaxWidth(),
@@ -253,7 +252,7 @@ fun SubjectCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(accentColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
@@ -262,7 +261,7 @@ fun SubjectCard(
                     imageVector = getSubjectIcon(subject.iconType),
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(26.dp)
                 )
             }
 
@@ -277,38 +276,19 @@ fun SubjectCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (subject.description.isNotBlank()) subject.description else "$totalUnits Curriculum Units",
+                    text = if (completedUnits > 0) "$totalUnits units • $completedUnits completed" else "$totalUnits units",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.textMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "$completedUnits / $totalUnits units",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (averageScore > 0) {
-                        Text(
-                            text = "•  Avg $averageScore%",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (averageScore >= 70) MaterialTheme.colorScheme.success else MaterialTheme.colorScheme.tertiary
-                        )
-                    }
-                }
             }
 
-            ProgressRing(
-                progressPercent = progressPercent,
-                size = 46.dp,
-                strokeWidth = 4.5.dp,
-                primaryColor = accentColor
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Open subject",
+                tint = MaterialTheme.colorScheme.textMuted,
+                modifier = Modifier.size(20.dp)
             )
         }
     }

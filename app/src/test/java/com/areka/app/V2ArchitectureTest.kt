@@ -27,6 +27,8 @@ import com.areka.app.data.repository.FlashcardScheduler
 import com.areka.app.feature.home.presentation.ContinueStudyItem
 import com.areka.app.feature.home.presentation.HomeScreen
 import com.areka.app.feature.home.presentation.HomeUiState
+import com.areka.app.feature.practice.presentation.PracticeScreen
+import com.areka.app.feature.practice.presentation.PracticeUiState
 import com.areka.app.feature.quiz.presentation.QuizActiveScreen
 import com.areka.app.feature.quiz.presentation.QuizUiState
 import com.areka.app.navigation.MainTab
@@ -326,5 +328,75 @@ class V2ArchitectureTest {
         composeTestRule.onNodeWithText("What is the primary function of chlorophyll?").assertIsDisplayed()
         composeTestRule.onNodeWithTag("quiz_submit_button").performClick()
         assertTrue(submitted)
+    }
+
+    @Test
+    fun `PracticeScreen renders subjects first and leaderboard without mastery hub`() {
+        val qb = DefaultQuestionBank()
+        val subjects = qb.getSubjects()
+        val unitsMap = subjects.associate { it.id to qb.getUnits(it.id) }
+        val testLb = listOf(
+            com.areka.app.data.model.LeaderboardEntry("u1", 1, "Alex Chen", "Grade 10", 94800, false, com.areka.app.data.model.BadgeType.GOLD),
+            com.areka.app.data.model.LeaderboardEntry("u_user", 2, "Student", "Grade 10", 85000, true, com.areka.app.data.model.BadgeType.SILVER)
+        )
+
+        val state = PracticeUiState(
+            isLoading = false,
+            subjects = subjects.take(2),
+            expandedSubjectId = null,
+            subjectUnitsMap = mapOf("math" to unitsMap["math"].orEmpty().take(1)),
+            leaderboard = testLb
+        )
+
+        composeTestRule.setContent {
+            ArekaV2Theme {
+                PracticeScreen(
+                    uiState = state,
+                    onEvent = {}
+                )
+            }
+        }
+
+        // Header
+        composeTestRule.onNodeWithText("Practice").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Pick a subject to practice").assertIsDisplayed()
+
+        // Subjects list
+        composeTestRule.onNodeWithTag("practice_subject_math").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("practice_subject_physics").assertIsDisplayed()
+
+        // Leaderboard
+        composeTestRule.onNodeWithText("Leaderboard").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Top Grade 10 students").assertIsDisplayed()
+    }
+
+    @Test
+    fun `LeaderboardCompactRow renders rank and user highlight`() {
+        val entry = com.areka.app.data.model.LeaderboardEntry(
+            id = "u_user",
+            rank = 1,
+            name = "Student",
+            grade = "Grade 10",
+            points = 95000,
+            isCurrentUser = true,
+            badgeType = com.areka.app.data.model.BadgeType.GOLD
+        )
+
+        composeTestRule.setContent {
+            ArekaV2Theme {
+                PracticeScreen(
+                    uiState = PracticeUiState(
+                        isLoading = false,
+                        subjects = emptyList(),
+                        leaderboard = listOf(entry)
+                    ),
+                    onEvent = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("leaderboard_row_1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("YOU").assertIsDisplayed()
+        composeTestRule.onNodeWithText("95,000 pts").assertIsDisplayed()
     }
 }
