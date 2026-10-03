@@ -33,7 +33,10 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class AppQuizRepository(
     private val databaseProvider: () -> AppDatabase?,
@@ -117,7 +120,7 @@ class AppQuizRepository(
             val allAttempts = db.studyDao().getAttemptsOnce(owner)
             val totalQuizzes = allAttempts.size
             val averageScore = if (allAttempts.isEmpty()) 0 else (allAttempts.sumOf { it.scorePercent } / totalQuizzes)
-            val todayEpochDay = LocalDate.now().toEpochDay()
+            val todayEpochDay = now / 86_400_000L
             val nextStreak = StudyStreakCalculator.nextStreak(profile.streakDays, profile.lastActiveDateEpochDay, todayEpochDay)
             val newTotalPoints = profile.totalPoints + score.pointsEarned
             val newHours = profile.timeStudiedHours + (timeSpentSeconds / 3600)
@@ -145,12 +148,16 @@ class AppQuizRepository(
             )
             db.recentActivityDao().insert(activity)
 
+            val completedAtIsoString = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.format(Date(now))
+
             // Trigger idempotent sync in background
             scope.launch {
                 syncRepository.recordQuizAttempt(
                     quiz = quiz,
                     score = score,
-                    completedAtIso = java.time.Instant.ofEpochMilli(now).toString(),
+                    completedAtIso = completedAtIsoString,
                     localAttemptId = attemptId
                 )
                 syncRepository.syncProfile(updatedProfile.toUserProfile())

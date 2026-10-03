@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalTime
 
 class HomeViewModel(
     private val profileRepository: IProfileRepository,
@@ -226,7 +225,7 @@ class HomeViewModel(
 
     private fun calculateGreeting(): String {
         return try {
-            val hour = LocalTime.now().hour
+            val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
             when (hour) {
                 in 5..11 -> "Good morning"
                 in 12..16 -> "Good afternoon"

@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.time.LocalDate
 import java.util.Date
 import java.util.Locale
 
@@ -98,7 +97,7 @@ class QuizRepository(
                 db.studyDao().insertMistakes(mistakes.map { it.copy(ownerUserId = owner) })
             }
 
-            val today = try { LocalDate.now().toEpochDay() } catch (_: Exception) { now / 86_400_000L }
+            val today = now / 86_400_000L
             val lastActive = existing.lastActiveDateEpochDay
             val streak = StudyStreakCalculator.nextStreak(existing.streakDays, lastActive, today)
             val attempts = db.studyDao().getAttemptCount(owner)
