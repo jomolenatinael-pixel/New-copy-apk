@@ -34,8 +34,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.areka.app.data.model.LeaderboardEntry
 import com.areka.app.data.model.SubjectItem
 import com.areka.app.data.model.SubjectUnit
+import java.text.NumberFormat
+import java.util.Locale
 
 // ==========================================
 // 1. ArekaV2Card
@@ -225,8 +228,308 @@ fun ProgressRing(
 }
 
 // ==========================================
-// 5. SubjectCard
+// 5. SubjectCard & ArekaSubjectGridCard
 // ==========================================
+@Composable
+fun ArekaSubjectGridCard(
+    subject: SubjectItem,
+    unitsCount: Int,
+    quizzesCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String = "practice_subject_${subject.id}"
+) {
+    val accentColor = Color(subject.accentColorHex)
+
+    ArekaV2Card(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick,
+        testTag = testTag,
+        shape = RoundedCornerShape(18.dp),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Icon Area (48dp x 48dp)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accentColor.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = getSubjectIcon(subject.iconType),
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Title
+            Text(
+                text = subject.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Metadata: units and quizzes
+            Text(
+                text = "$unitsCount units",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.textMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "$quizzesCount quizzes",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.textMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Action: "Practice →"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Practice",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Practice ${subject.name}",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ArekaHomeSubjectCard(
+    subject: SubjectItem,
+    unitsCount: Int,
+    completedUnits: Int = 0,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String = "home_subject_${subject.id}"
+) {
+    val accentColor = Color(subject.accentColorHex)
+
+    ArekaV2Card(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick,
+        testTag = testTag,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(14.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accentColor.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = getSubjectIcon(subject.iconType),
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Open ${subject.name}",
+                    tint = MaterialTheme.colorScheme.textMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = subject.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = if (completedUnits > 0) "$unitsCount units • $completedUnits done" else "$unitsCount units",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.textMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun ArekaCompactLeaderboardRow(
+    entry: LeaderboardEntry,
+    modifier: Modifier = Modifier,
+    testTag: String = "leaderboard_row_${entry.rank}"
+) {
+    val isCurrent = entry.isCurrentUser
+    val rankBadgeColor = when (entry.rank) {
+        1 -> Color(0xFFEAB308) // Gold
+        2 -> Color(0xFF94A3B8) // Silver
+        3 -> Color(0xFFCD7F32) // Bronze
+        else -> MaterialTheme.colorScheme.textMuted
+    }
+
+    val formattedPoints = try {
+        NumberFormat.getNumberInstance(Locale.US).format(entry.points)
+    } catch (_: Exception) {
+        "${entry.points}"
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(testTag),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
+        else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            else MaterialTheme.colorScheme.subtleBorder
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Rank with special visual treatment for top 3
+            Box(
+                modifier = Modifier.width(36.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (entry.rank <= 3) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            tint = rankBadgeColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "#${entry.rank}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = rankBadgeColor
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "#${entry.rank}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = rankBadgeColor,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            }
+
+            // 38dp Avatar with initial
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(Color(entry.avatarColorHex).copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = (entry.name.firstOrNull() ?: 'S').uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(entry.avatarColorHex)
+                )
+            }
+
+            // Name & Grade
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = entry.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isCurrent) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "YOU",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+                if (entry.grade.isNotBlank()) {
+                    Text(
+                        text = entry.grade,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.textMuted
+                    )
+                }
+            }
+
+            // Points aligned to end
+            Text(
+                text = "$formattedPoints pts",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
 @Composable
 fun SubjectCard(
     subject: SubjectItem,
@@ -882,6 +1185,7 @@ fun ErrorState(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onRetry,
+            modifier = Modifier.testTag("error_retry_button"),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(12.dp)
         ) {

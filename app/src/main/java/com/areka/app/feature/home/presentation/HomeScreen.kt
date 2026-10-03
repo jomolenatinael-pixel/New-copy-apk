@@ -187,23 +187,34 @@ fun HomeScreen(
             )
         }
 
-        items(uiState.subjects, key = { "subject_${it.subjectId}" }) { progress ->
-            val subjectItem = questionBank.getSubject(progress.subjectId) ?: SubjectItem(
-                id = progress.subjectId,
-                name = progress.subjectName,
-                iconType = progress.iconType,
-                quizCount = progress.totalUnits,
-                accentColorHex = progress.accentColorHex
-            )
+        items(uiState.subjects.chunked(2), key = { chunk -> "subj_row_${chunk.first().subjectId}" }) { pair ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                pair.forEach { progress ->
+                    val subjectItem = questionBank.getSubject(progress.subjectId) ?: SubjectItem(
+                        id = progress.subjectId,
+                        name = progress.subjectName,
+                        iconType = progress.iconType,
+                        quizCount = progress.totalUnits,
+                        accentColorHex = progress.accentColorHex
+                    )
 
-            SubjectCard(
-                subject = subjectItem,
-                completedUnits = progress.completedUnits,
-                totalUnits = progress.totalUnits,
-                averageScore = progress.averageScorePercent,
-                onClick = { onEvent(HomeEvent.OpenSubject(progress.subjectId)) },
-                modifier = Modifier.padding(horizontal = 18.dp)
-            )
+                    ArekaHomeSubjectCard(
+                        subject = subjectItem,
+                        unitsCount = progress.totalUnits,
+                        completedUnits = progress.completedUnits,
+                        onClick = { onEvent(HomeEvent.OpenSubject(progress.subjectId)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (pair.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }

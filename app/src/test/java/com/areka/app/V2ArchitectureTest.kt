@@ -27,6 +27,7 @@ import com.areka.app.data.repository.FlashcardScheduler
 import com.areka.app.feature.home.presentation.ContinueStudyItem
 import com.areka.app.feature.home.presentation.HomeScreen
 import com.areka.app.feature.home.presentation.HomeUiState
+import com.areka.app.feature.practice.presentation.PracticeEvent
 import com.areka.app.feature.practice.presentation.PracticeScreen
 import com.areka.app.feature.practice.presentation.PracticeUiState
 import com.areka.app.feature.quiz.presentation.QuizActiveScreen
@@ -331,43 +332,45 @@ class V2ArchitectureTest {
     }
 
     @Test
-    fun `PracticeScreen renders subjects first and leaderboard without mastery hub`() {
+    fun `PracticeScreen renders subjects grid and triggers OpenSubject on click`() {
         val qb = DefaultQuestionBank()
         val subjects = qb.getSubjects()
-        val unitsMap = subjects.associate { it.id to qb.getUnits(it.id) }
-        val testLb = listOf(
-            com.areka.app.data.model.LeaderboardEntry("u1", 1, "Alex Chen", "Grade 10", 94800, false, com.areka.app.data.model.BadgeType.GOLD),
-            com.areka.app.data.model.LeaderboardEntry("u_user", 2, "Student", "Grade 10", 85000, true, com.areka.app.data.model.BadgeType.SILVER)
-        )
+        val unitsMap = subjects.associate { it.id to qb.getUnits(it.id).size }
+        val quizzesMap = subjects.associate { it.id to it.quizCount }
+
+        var clickedSubjectId: String? = null
 
         val state = PracticeUiState(
             isLoading = false,
             subjects = subjects.take(2),
-            expandedSubjectId = null,
-            subjectUnitsMap = mapOf("math" to unitsMap["math"].orEmpty().take(1)),
-            leaderboard = testLb
+            subjectUnitsCountMap = unitsMap,
+            subjectQuizzesCountMap = quizzesMap,
+            leaderboard = emptyList()
         )
 
         composeTestRule.setContent {
             ArekaV2Theme {
                 PracticeScreen(
                     uiState = state,
-                    onEvent = {}
+                    onEvent = { event ->
+                        if (event is PracticeEvent.OpenSubject) {
+                            clickedSubjectId = event.subjectId
+                        }
+                    }
                 )
             }
         }
 
         // Header
-        composeTestRule.onNodeWithText("Practice").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Pick a subject to practice").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Choose a subject to start practicing").assertIsDisplayed()
 
-        // Subjects list
+        // Subjects grid
         composeTestRule.onNodeWithTag("practice_subject_math").assertIsDisplayed()
         composeTestRule.onNodeWithTag("practice_subject_physics").assertIsDisplayed()
 
-        // Leaderboard
-        composeTestRule.onNodeWithText("Leaderboard").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Top Grade 10 students").assertIsDisplayed()
+        // Tap math
+        composeTestRule.onNodeWithTag("practice_subject_math").performClick()
+        assertEquals("math", clickedSubjectId)
     }
 
     @Test
@@ -384,19 +387,35 @@ class V2ArchitectureTest {
 
         composeTestRule.setContent {
             ArekaV2Theme {
-                PracticeScreen(
-                    uiState = PracticeUiState(
-                        isLoading = false,
-                        subjects = emptyList(),
-                        leaderboard = listOf(entry)
-                    ),
-                    onEvent = {}
-                )
+                com.areka.app.core.designsystem.ArekaCompactLeaderboardRow(entry = entry)
             }
         }
 
         composeTestRule.onNodeWithTag("leaderboard_row_1").assertIsDisplayed()
         composeTestRule.onNodeWithText("YOU").assertIsDisplayed()
         composeTestRule.onNodeWithText("95,000 pts").assertIsDisplayed()
+    }
+
+    @Test
+    fun `PracticeScreen renders error state and triggers refresh on retry`() {
+        var refreshed = false
+        val state = PracticeUiState(
+            isLoading = false,
+            subjects = emptyList(),
+            error = "Failed to load subjects"
+        )
+
+        composeTestRule.setContent {
+            ArekaV2Theme {
+                PracticeScreen(
+                    uiState = state,
+                    onEvent = { if (it is PracticeEvent.Refresh) refreshed = true }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Failed to load subjects").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("error_retry_button").performClick()
+        assertTrue(refreshed)
     }
 }

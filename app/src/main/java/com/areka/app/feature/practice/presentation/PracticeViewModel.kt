@@ -56,7 +56,12 @@ class PracticeViewModel(
             viewModelScope.launch {
                 syncRepo.leaderboard.collect { cloudLb ->
                     if (cloudLb.isNotEmpty()) {
-                        _uiState.update { it.copy(leaderboard = cloudLb.take(10)) }
+                        _uiState.update {
+                            it.copy(
+                                leaderboard = cloudLb.take(10),
+                                isOfflineMode = false
+                            )
+                        }
                     }
                 }
             }
@@ -66,11 +71,13 @@ class PracticeViewModel(
     private fun refreshLeaderboard(profile: UserProfile) {
         val fallback = LeaderboardRepository().global(profile)
         val cloudLb = syncRepository?.leaderboard?.value.orEmpty()
+        val isOffline = cloudLb.isEmpty()
         val effectiveLb = if (cloudLb.isNotEmpty()) cloudLb else fallback
         _uiState.update {
             it.copy(
                 leaderboard = effectiveLb.take(10),
-                currentUserId = profile.name
+                currentUserId = profile.name,
+                isOfflineMode = isOffline
             )
         }
     }
@@ -81,6 +88,8 @@ class PracticeViewModel(
             try {
                 val subjects = questionBank.getSubjects()
                 val unitsMap = subjects.associate { it.id to questionBank.getUnits(it.id) }
+                val unitsCountMap = subjects.associate { it.id to (unitsMap[it.id]?.size ?: 0) }
+                val quizzesCountMap = subjects.associate { it.id to it.quizCount }
 
                 val completedMap = mutableMapOf<String, Int>()
                 runCatching {
@@ -99,19 +108,23 @@ class PracticeViewModel(
                 val profile = profileRepository?.userProfile?.value ?: UserProfile()
                 val fallback = LeaderboardRepository().global(profile)
                 val cloudLb = syncRepository?.leaderboard?.value.orEmpty()
+                val isOffline = cloudLb.isEmpty()
                 val effectiveLb = if (cloudLb.isNotEmpty()) cloudLb else fallback
 
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         subjects = subjects,
-                        expandedSubjectId = it.expandedSubjectId,
-                        selectedSubjectId = initialSubjectId,
-                        subjectUnits = initialUnits,
+                        subjectUnitsCountMap = unitsCountMap,
+                        subjectQuizzesCountMap = quizzesCountMap,
                         subjectUnitsMap = unitsMap,
                         subjectCompletedUnitsMap = completedMap,
                         leaderboard = effectiveLb.take(10),
                         currentUserId = profile.name,
+                        isOfflineMode = isOffline,
+                        expandedSubjectId = it.expandedSubjectId,
+                        selectedSubjectId = initialSubjectId,
+                        subjectUnits = initialUnits,
                         recommendations = recs,
                         weakAreas = weak,
                         openMistakesCount = openMistakes,
@@ -119,7 +132,7 @@ class PracticeViewModel(
                     )
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to load practice") }
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to load subjects") }
             }
         }
     }

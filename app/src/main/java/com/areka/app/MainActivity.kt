@@ -329,6 +329,9 @@ fun ArekaV2App(
                                         learnViewModel.selectSubject(event.subjectId)
                                         navManager.navigateTo(NavRoute.SubjectDetail(event.subjectId))
                                     }
+                                    is PracticeEvent.ViewFullLeaderboard -> {
+                                        navManager.selectTab(MainTab.PROGRESS)
+                                    }
                                     is PracticeEvent.SelectCategory -> practiceViewModel.selectCategory(event.category)
                                     is PracticeEvent.SelectSubjectFilter -> practiceViewModel.selectSubjectFilter(event.subjectId)
                                     is PracticeEvent.StartQuiz -> {

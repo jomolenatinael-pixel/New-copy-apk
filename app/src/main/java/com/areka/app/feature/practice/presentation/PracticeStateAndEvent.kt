@@ -17,13 +17,17 @@ enum class PracticeCategory {
 data class PracticeUiState(
     val isLoading: Boolean = false,
     val subjects: List<SubjectItem> = emptyList(),
+    val subjectUnitsCountMap: Map<String, Int> = emptyMap(),
+    val subjectQuizzesCountMap: Map<String, Int> = emptyMap(),
+    val leaderboard: List<LeaderboardEntry> = emptyList(),
+    val currentUserId: String? = null,
+    val isLeaderboardLoading: Boolean = false,
+    val isOfflineMode: Boolean = false,
+    val error: String? = null,
+    // Retained for backward compatibility with existing tests and calls
     val expandedSubjectId: String? = null,
     val subjectUnitsMap: Map<String, List<SubjectUnit>> = emptyMap(),
     val subjectCompletedUnitsMap: Map<String, Int> = emptyMap(),
-    val leaderboard: List<LeaderboardEntry> = emptyList(),
-    val currentUserId: String? = null,
-    val error: String? = null,
-    // Retained for backward compatibility
     val selectedCategory: PracticeCategory = PracticeCategory.BY_SUBJECT,
     val selectedSubjectId: String? = null,
     val subjectUnits: List<SubjectUnit> = emptyList(),
@@ -34,12 +38,13 @@ data class PracticeUiState(
 )
 
 sealed interface PracticeEvent {
-    data class ToggleSubject(val subjectId: String) : PracticeEvent
     data class OpenSubject(val subjectId: String) : PracticeEvent
+    data object ViewFullLeaderboard : PracticeEvent
+    data object Refresh : PracticeEvent
+    // Retained for backward compatibility
+    data class ToggleSubject(val subjectId: String) : PracticeEvent
     data class StartQuiz(val quizId: String, val unitId: String, val subjectId: String) : PracticeEvent
     data class StudyFlashcards(val unitId: String, val subjectId: String) : PracticeEvent
-    data object Refresh : PracticeEvent
-    // Kept for backward compatibility
     data class SelectCategory(val category: PracticeCategory) : PracticeEvent
     data class SelectSubjectFilter(val subjectId: String) : PracticeEvent
     data class ReviewMistakes(val unitId: String? = null) : PracticeEvent
